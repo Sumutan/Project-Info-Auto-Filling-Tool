@@ -6,6 +6,7 @@
 release/
 
 # 构建产物
+*.zip
 *.spec
 build/
 dist/
