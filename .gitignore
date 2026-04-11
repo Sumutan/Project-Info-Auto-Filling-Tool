@@ -3,6 +3,12 @@
 标准化模板/
 输出文件/
 我的项目输出/
+release/
+
+# 构建产物
+*.spec
+build/
+dist/
 
 # Python 相关
 __pycache__/

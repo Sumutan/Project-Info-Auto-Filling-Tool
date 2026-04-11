@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>项目信息自动填充工具 - 使用说明书</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        h1 { color: #333; border-bottom: 2px solid #667eea; padding-bottom: 10px; }
+        h2 { color: #667eea; margin-top: 30px; }
+        h3 { color: #764ba2; margin-top: 20px; }
+        .step { background: #f5f5f5; padding: 10px; margin: 10px 0; border-left: 3px solid #667eea; }
+        .warning { background: #fff3cd; padding: 10px; margin: 10px 0; border-left: 3px solid #ffc107; }
+        code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; }
+        ul { margin-left: 20px; }
+    </style>
+</head>
+<body>
+    <h1>项目信息自动填充工具 - 使用说明书</h1>
+    
+    <h2>一、快速开始</h2>
+    <div class="step">1. 将Word模板放入"文件模板"文件夹</div>
+    <div class="step">2. 复制"项目信息示例.txt"并重命名为"项目信息.txt.txt"</div>
+    <div class="step">3. 编辑"项目信息.txt.txt"填写实际项目信息</div>
+    <div class="step">4. 运行"文档格式转换工具.exe"</div>
+    <div class="step">5. 运行"项目信息自动填充工具.exe"</div>
+    <div class="step">6. 在"输出文件"文件夹中查看结果</div>
+
+    <h2>二、配置项目信息</h2>
+    <p>在"项目信息.txt.txt"文件中按以下格式填写：</p>
+    <code>项目名称:示例项目</code><br>
+    <code>客户单位:示例客户</code><br>
+    <code>合同编号:20260001</code>
+    
+    <div class="warning">
+        <strong>注意：</strong>
+        <ul>
+            <li>使用英文冒号 ":" 分隔</li>
+            <li>字段名必须与模板中的 {字段名} 完全一致</li>
+            <li>每行一个字段</li>
+        </ul>
+    </div>
+
+    <h2>三、模板标记</h2>
+    <p>在Word模板中使用 <code>{字段名}</code> 格式标记需要填充的位置</p>
+    <p>例如：<code>{项目名称}</code>、<code>{客户单位}</code>、<code>{合同编号}</code></p>
+
+    <h2>四、系统要求</h2>
+    <ul>
+        <li>Windows 7/8/10/11 (64位)</li>
+        <li>Microsoft Word 2010 或更高版本</li>
+    </ul>
+
+    <h2>五、常见问题</h2>
+    <h3>Q: 填充后字段没有被替换？</h3>
+    <p>A: 检查模板中的字段名格式是否正确，是否与配置文件完全一致</p>
+    
+    <h3>Q: 转换.doc文件失败？</h3>
+    <p>A: 确保已安装Microsoft Word 2010或更高版本</p>
+
+    <h2>六、技术支持</h2>
+    <p>如有问题请联系 AI中心 获取技术支持。</p>
+</body>
+</html>
