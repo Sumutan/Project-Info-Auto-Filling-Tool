@@ -9,6 +9,8 @@ import re
 import configparser
 from pathlib import Path
 from docx import Document
+from openpyxl import load_workbook
+from openpyxl.utils.exceptions import InvalidFileException
 
 # 读取配置文件
 config = configparser.ConfigParser()
@@ -66,15 +68,52 @@ def replace_text_in_doc(doc, info):
 
     return doc
 
+def replace_text_in_excel(wb, info):
+    """替换Excel文件中的所有字段"""
+    # 遍历所有工作表
+    for ws in wb.worksheets:
+        # 遍历所有单元格
+        for row in ws.iter_rows():
+            for cell in row:
+                if cell.value and isinstance(cell.value, str):
+                    for key, value in info.items():
+                        placeholder = "{" + key + "}"
+                        if placeholder in cell.value:
+                            cell.value = cell.value.replace(placeholder, value)
+    return wb
+
 def process_docx_file(source_path, target_path, info):
     """处理单个docx文件，替换字段后保存到目标路径"""
     try:
+        # 跳过临时文件和损坏文件
+        if os.path.basename(source_path).startswith("~$"):
+            print(f"跳过临时文件: {source_path}")
+            return False
         doc = Document(source_path)
         doc = replace_text_in_doc(doc, info)
         doc.save(target_path)
         return True
     except Exception as e:
         print(f"处理文件失败 {source_path}: {str(e)}")
+        return False
+
+def process_excel_file(source_path, target_path, info):
+    """处理单个Excel文件，替换字段后保存到目标路径"""
+    try:
+        # 跳过临时文件
+        if os.path.basename(source_path).startswith("~$"):
+            print(f"跳过临时文件: {source_path}")
+            return False
+        # 加载Excel文件，keep_vba=True保留宏（支持.xlsm）
+        wb = load_workbook(source_path, keep_vba=True)
+        wb = replace_text_in_excel(wb, info)
+        wb.save(target_path)
+        return True
+    except InvalidFileException as e:
+        print(f"无效Excel文件 {source_path}: {str(e)}")
+        return False
+    except Exception as e:
+        print(f"处理Excel文件失败 {source_path}: {str(e)}")
         return False
 
 def main():
@@ -93,7 +132,8 @@ def main():
 
     # 统计信息
     total_files = 0
-    processed_files = 0
+    processed_docx = 0
+    processed_excel = 0
     copied_files = 0
     failed_files = 0
 
@@ -113,13 +153,24 @@ def main():
 
             # 跳过临时文件
             if file.startswith("~$"):
+                print(f"跳过临时文件: {source_file}")
                 continue
 
             # 处理docx文件
             if file.lower().endswith(".docx"):
-                print(f"处理: {source_file} -> {target_file}")
+                print(f"处理Word: {source_file} -> {target_file}")
                 if process_docx_file(source_file, target_file, info):
-                    processed_files += 1
+                    processed_docx += 1
+                else:
+                    failed_files += 1
+                    # 处理失败的话复制原文件
+                    print(f"复制原文件: {source_file} -> {target_file}")
+                    shutil.copy2(source_file, target_file)
+            # 处理Excel文件
+            elif file.lower().endswith((".xlsx", ".xlsm")):
+                print(f"处理Excel: {source_file} -> {target_file}")
+                if process_excel_file(source_file, target_file, info):
+                    processed_excel += 1
                 else:
                     failed_files += 1
                     # 处理失败的话复制原文件
@@ -134,7 +185,8 @@ def main():
     # 输出统计
     print(f"\n处理完成！")
     print(f"总文件数: {total_files}")
-    print(f"成功处理docx文件: {processed_files}")
+    print(f"成功处理Word文件: {processed_docx}")
+    print(f"成功处理Excel文件: {processed_excel}")
     print(f"直接复制其他文件: {copied_files}")
     print(f"处理失败文件: {failed_files}")
     print(f"结果已保存到: {OUTPUT_DIR} 目录")
