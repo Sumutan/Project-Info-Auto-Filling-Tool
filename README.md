@@ -108,6 +108,7 @@ python fill_project_info.py
 4. 工具不会修改原 `文件模板`和 `标准化模板`目录中的内容
 5. 所有处理结果都保存在 `输出文件`目录中
 
+<<<<<<< HEAD
 ## TODO List
 
     - 支持处理word文档 ✅
