@@ -3,10 +3,13 @@
 标准化模板/
 输出文件/
 我的项目输出/
-release/
+
+# release下忽略模板目录，保留文档和可执行文件
+release/标准化模板/
+release/输出文件/
+release/文件模板/
 
 # 构建产物
-*.zip
 *.spec
 build/
 dist/
@@ -37,3 +40,9 @@ Thumbs.db
 
 # 其他
 *.log
+.claude/
+
+# 大文件
+release/文档格式转换工具.exe
+release/项目信息自动填充工具.exe
+*.zip

@@ -23,19 +23,23 @@
 </head>
 <body>
     <h1>项目信息自动填充工具 - 使用说明书</h1>
-    
+
+    <div style="text-align: center; margin: 20px 0;">
+        <img src="logo.png" alt="工具主图" style="max-width: 100%; border-radius: 10px; box-shadow: 0 5px 20px rgba(0,0,0,0.1);">
+    </div>
+
     <h2>一、快速开始</h2>
-    <div class="step">1. 将Word模板放入"文件模板"文件夹</div>
-    <div class="step">2. 复制"项目信息示例.txt"并重命名为"项目信息.txt.txt"</div>
-    <div class="step">3. 编辑"项目信息.txt.txt"填写实际项目信息</div>
-    <div class="step">4. 运行"文档格式转换工具.exe"</div>
-    <div class="step">5. 运行"项目信息自动填充工具.exe"</div>
-    <div class="step">6. 在"输出文件"文件夹中查看结果</div>
+    <div class="step">1. 将Word/Excel模板放入"文件模板"文件夹（支持.doc/.docx/.xlsx/.xlsm格式）</div>
+    <div class="step">2. 编辑"项目信息.txt"填写实际项目信息</div>
+    <div class="step">3. 运行"文档格式转换工具.exe"转换.doc格式为.docx</div>
+    <div class="step">4. 运行"项目信息自动填充工具.exe"填充信息到模板</div>
+    <div class="step">5. 在"输出文件"文件夹中查看结果</div>
 
     <h2>二、配置项目信息</h2>
-    <p>在"项目信息.txt.txt"文件中按以下格式填写：</p>
+    <p>在"项目信息.txt"文件中按以下格式填写：</p>
     <code>项目名称:示例项目</code><br>
     <code>客户单位:示例客户</code><br>
+    <code>项目编号:XM20260001</code><br>
     <code>合同编号:20260001</code>
     
     <div class="warning">
@@ -48,8 +52,8 @@
     </div>
 
     <h2>三、模板标记</h2>
-    <p>在Word模板中使用 <code>{字段名}</code> 格式标记需要填充的位置</p>
-    <p>例如：<code>{项目名称}</code>、<code>{客户单位}</code>、<code>{合同编号}</code></p>
+    <p>在Word/Excel模板中使用 <code>{字段名}</code> 格式标记需要填充的位置</p>
+    <p>例如：<code>{项目名称}</code>、<code>{客户单位}</code>、<code>{项目编号}</code>、<code>{合同编号}</code></p>
 
     <h2>四、系统要求</h2>
     <ul>
