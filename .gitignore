@@ -41,7 +41,6 @@ Thumbs.db
 # 其他
 *.log
 .claude/
-docs/
 
 # 大文件
 release/文档格式转换工具.exe
