@@ -8,7 +8,10 @@ import shutil
 import re
 import configparser
 from pathlib import Path
+from copy import deepcopy
 from docx import Document
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
 from openpyxl import load_workbook
 from openpyxl.utils.exceptions import InvalidFileException
 
@@ -23,8 +26,11 @@ TEMPLATE_DIR = config.get("paths", "template_dir", fallback="标准化模板")
 OUTPUT_DIR = config.get("paths", "output_dir", fallback="输出文件")
 PROJECT_INFO_FILE = config.get("paths", "project_info_file", fallback="项目信息.txt")
 
+# 收集模板中未定义的标签
+undefined_tags = set()
+
 def load_project_info():
-    """加载项目信息，返回字段字典"""
+    """加载项目信息，返回字段字典。支持单行(key:value)和多行(key:```...```)格式"""
     info = {}
     if not os.path.exists(PROJECT_INFO_FILE):
         print(f"错误：{PROJECT_INFO_FILE} 文件不存在！")
@@ -32,54 +38,184 @@ def load_project_info():
 
     try:
         with open(PROJECT_INFO_FILE, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line or line.startswith("#"):
-                    continue
-                if ":" in line:
-                    key, value = line.split(":", 1)
-                    key = key.strip()
-                    value = value.strip()
+            lines = f.readlines()
+
+        i = 0
+        while i < len(lines):
+            line = lines[i].rstrip("\n\r")
+            stripped = line.strip()
+
+            # 跳过空行和注释
+            if not stripped or stripped.startswith("#"):
+                i += 1
+                continue
+
+            # 支持英文冒号(:)和中文冒号(：)
+            sep = ":" if ":" in stripped else ("：" if "：" in stripped else None)
+            if sep:
+                key, value = stripped.split(sep, 1)
+                key = key.strip()
+                value = value.strip()
+
+                # 检测多行块：key:``` 或 key: ``` 或 key:\n```
+                if value == "```":
+                    # 读取直到结束的 ```
+                    multiline_parts = []
+                    i += 1
+                    while i < len(lines):
+                        ml = lines[i].rstrip("\n\r")
+                        if ml.strip() == "```":
+                            break
+                        multiline_parts.append(ml)
+                        i += 1
+                    info[key] = "\n".join(multiline_parts)
+                elif value == "" and i + 1 < len(lines) and lines[i + 1].strip() == "```":
+                    # key: (空值) 且下一行是 ```，视为多行块
+                    i += 2
+                    multiline_parts = []
+                    while i < len(lines):
+                        ml = lines[i].rstrip("\n\r")
+                        if ml.strip() == "```":
+                            break
+                        multiline_parts.append(ml)
+                        i += 1
+                    info[key] = "\n".join(multiline_parts)
+                else:
                     info[key] = value
+
+            i += 1
+
         print(f"成功加载 {len(info)} 个项目字段")
         return info
     except Exception as e:
         print(f"读取 {PROJECT_INFO_FILE} 失败: {str(e)}")
         return None
 
-def replace_text_in_doc(doc, info):
-    """替换文档中的所有字段"""
+def _check_undefined_tags(text, info, source_desc):
+    """检查文本中的{标签}是否在info中存在定义，未定义则警告"""
+    matches = re.findall(r'\{([^}]+)\}', text)
+    for tag in matches:
+        if tag not in info:
+            undefined_tags.add(tag)
+            print(f"  警告：标签 {{{tag}}} 在项目信息中未定义！ (来源: {source_desc})")
+
+def _add_line_break(run):
+    """在run中插入一个换行符(w:br)"""
+    br = OxmlElement("w:br")
+    run._element.append(br)
+
+def _replace_in_paragraph(para, info, source_desc=""):
+    """在段落run级别替换字段，保留原格式，支持多行内容（\n渲染为换行）"""
+    full_text = para.text
+    if "{" not in full_text:
+        return
+
+    # 检查未定义标签
+    _check_undefined_tags(full_text, info, source_desc)
+
+    # 检查是否有需要替换的内容
+    has_placeholder = False
+    for key in info:
+        if "{" + key + "}" in full_text:
+            has_placeholder = True
+            break
+    if not has_placeholder:
+        return
+
+    runs = para.runs
+    if not runs:
+        return
+
+    # 在拼接文本上执行替换
+    new_text = full_text
+    for key, value in info.items():
+        placeholder = "{" + key + "}"
+        new_text = new_text.replace(placeholder, value)
+
+    if new_text == full_text:
+        return
+
+    # 检查替换结果是否包含换行
+    if "\n" not in new_text:
+        # 无换行，按原策略处理
+        runs[0].text = new_text
+        for run in runs[1:]:
+            run.text = ""
+    else:
+        # 有换行，需要在run中插入<w:br/>元素
+        # 清空所有run
+        for run in runs:
+            run.text = ""
+
+        # 将文本按\n分割，逐段写入第一个run，每段之间插入<w:br/>
+        parts = new_text.split("\n")
+        for idx, part in enumerate(parts):
+            if idx > 0:
+                _add_line_break(runs[0])
+            runs[0].text = runs[0].text + part
+
+def replace_text_in_doc(doc, info, source_desc=""):
+    """替换文档中的所有字段，保留原格式"""
     # 替换段落中的字段
     for para in doc.paragraphs:
-        for key, value in info.items():
-            placeholder = "{" + key + "}"
-            if placeholder in para.text:
-                para.text = para.text.replace(placeholder, value)
+        _replace_in_paragraph(para, info, source_desc)
 
     # 替换表格中的字段
     for table in doc.tables:
         for row in table.rows:
             for cell in row.cells:
                 for para in cell.paragraphs:
-                    for key, value in info.items():
-                        placeholder = "{" + key + "}"
-                        if placeholder in para.text:
-                            para.text = para.text.replace(placeholder, value)
+                    _replace_in_paragraph(para, info, source_desc)
 
     return doc
 
-def replace_text_in_excel(wb, info):
-    """替换Excel文件中的所有字段"""
-    # 遍历所有工作表
+def replace_text_in_excel(wb, info, source_desc=""):
+    """替换Excel文件中的所有字段，支持复合内容和合并单元格"""
     for ws in wb.worksheets:
+        # 获取合并单元格信息
+        merged_ranges = list(ws.merged_cells.ranges)
+
+        # 收集合并区域中左上角单元格的坐标
+        merge_top_left = set()
+        for merged_range in merged_ranges:
+            merge_top_left.add((merged_range.min_row, merged_range.min_col))
+
         # 遍历所有单元格
         for row in ws.iter_rows():
             for cell in row:
-                if cell.value and isinstance(cell.value, str):
+                # 合并单元格：只有左上角单元格有值，跳过其他合并区域的单元格
+                if (cell.row, cell.column) not in merge_top_left:
+                    # 检查是否在某个合并区域内
+                    in_merged = False
+                    for merged_range in merged_ranges:
+                        if (merged_range.min_row <= cell.row <= merged_range.max_row and
+                            merged_range.min_col <= cell.column <= merged_range.max_col):
+                            if cell.row != merged_range.min_row or cell.column != merged_range.min_col:
+                                in_merged = True
+                                break
+                    if in_merged:
+                        continue
+
+                cell_value = cell.value
+                if cell_value is None:
+                    continue
+
+                # 支持字符串类型的复合内容替换
+                if isinstance(cell_value, str):
+                    if "{" not in cell_value:
+                        continue
+
+                    # 检查未定义标签
+                    _check_undefined_tags(cell_value, info, source_desc)
+
+                    new_value = cell_value
                     for key, value in info.items():
                         placeholder = "{" + key + "}"
-                        if placeholder in cell.value:
-                            cell.value = cell.value.replace(placeholder, value)
+                        new_value = new_value.replace(placeholder, value)
+
+                    if new_value != cell_value:
+                        cell.value = new_value
+
     return wb
 
 def process_docx_file(source_path, target_path, info):
@@ -90,7 +226,7 @@ def process_docx_file(source_path, target_path, info):
             print(f"跳过临时文件: {source_path}")
             return False
         doc = Document(source_path)
-        doc = replace_text_in_doc(doc, info)
+        doc = replace_text_in_doc(doc, info, source_path)
         doc.save(target_path)
         return True
     except Exception as e:
@@ -106,7 +242,7 @@ def process_excel_file(source_path, target_path, info):
             return False
         # 加载Excel文件，keep_vba=True保留宏（支持.xlsm）
         wb = load_workbook(source_path, keep_vba=True)
-        wb = replace_text_in_excel(wb, info)
+        wb = replace_text_in_excel(wb, info, source_path)
         wb.save(target_path)
         return True
     except InvalidFileException as e:
@@ -189,7 +325,29 @@ def main():
     print(f"成功处理Excel文件: {processed_excel}")
     print(f"直接复制其他文件: {copied_files}")
     print(f"处理失败文件: {failed_files}")
+
+    # 输出未定义标签汇总
+    if undefined_tags:
+        print(f"\n⚠ 发现 {len(undefined_tags)} 个未定义标签（在项目信息中找不到对应字段）：")
+        for tag in sorted(undefined_tags):
+            print(f"  - {{{tag}}}")
+
     print(f"结果已保存到: {OUTPUT_DIR} 目录")
+
+    # 将输出目录中所有 .xlsx 文件重命名为 .xls
+    renamed = 0
+    for root, _, files in os.walk(OUTPUT_DIR):
+        for file in files:
+            if file.lower().endswith(".xlsx"):
+                old_path = os.path.join(root, file)
+                new_path = os.path.join(root, file[:-5] + ".xls")
+                os.rename(old_path, new_path)
+                print(f"重命名: {old_path} -> {new_path}")
+                renamed += 1
+    if renamed:
+        print(f"已将 {renamed} 个 .xlsx 文件重命名为 .xls")
 
 if __name__ == "__main__":
     main()
+    print("\n按任意键退出...")
+    input()
