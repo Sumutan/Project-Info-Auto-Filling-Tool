@@ -14,6 +14,9 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from openpyxl import load_workbook
 from openpyxl.utils.exceptions import InvalidFileException
+import xlrd
+import xlwt
+from xlutils.copy import copy as xl_copy
 
 # 读取配置文件
 config = configparser.ConfigParser()
@@ -233,6 +236,52 @@ def process_docx_file(source_path, target_path, info):
         print(f"处理文件失败 {source_path}: {str(e)}")
         return False
 
+def _xls_write_preserve_style(ws, row, col, value):
+    """写入 xls 单元格时保留原有 xf_idx（字体/格式）"""
+    row_obj = ws._Worksheet__rows.get(row)
+    orig_xf = None
+    if row_obj:
+        cell_obj = row_obj._Row__cells.get(col)
+        if cell_obj:
+            orig_xf = cell_obj.xf_idx
+    ws.write(row, col, value)
+    if orig_xf is not None:
+        row_obj = ws._Worksheet__rows.get(row)
+        if row_obj:
+            cell_obj = row_obj._Row__cells.get(col)
+            if cell_obj:
+                cell_obj.xf_idx = orig_xf
+
+def process_xls_file(source_path, target_path, info):
+    """处理单个 .xls 文件，替换字段后保存到目标路径"""
+    try:
+        if os.path.basename(source_path).startswith("~$"):
+            print(f"跳过临时文件: {source_path}")
+            return False
+        rb = xlrd.open_workbook(source_path, formatting_info=True)
+        wb = xl_copy(rb)
+        # xlrd 对 Excel 内置格式会产生 None key，xlwt 序列化时会崩溃，需要清除
+        if None in wb._Workbook__styles._num_formats:
+            del wb._Workbook__styles._num_formats[None]
+        for si in range(rb.nsheets):
+            rs = rb.sheet_by_index(si)
+            ws = wb.get_sheet(si)
+            for row in range(rs.nrows):
+                for col in range(rs.ncols):
+                    cell = rs.cell(row, col)
+                    if cell.ctype == xlrd.XL_CELL_TEXT and "{" in cell.value:
+                        _check_undefined_tags(cell.value, info, source_path)
+                        new_val = cell.value
+                        for key, value in info.items():
+                            new_val = new_val.replace("{" + key + "}", value)
+                        if new_val != cell.value:
+                            _xls_write_preserve_style(ws, row, col, new_val)
+        wb.save(target_path)
+        return True
+    except Exception as e:
+        print(f"处理xls文件失败 {source_path}: {str(e)}")
+        return False
+
 def process_excel_file(source_path, target_path, info):
     """处理单个Excel文件，替换字段后保存到目标路径"""
     try:
@@ -302,14 +351,22 @@ def main():
                     # 处理失败的话复制原文件
                     print(f"复制原文件: {source_file} -> {target_file}")
                     shutil.copy2(source_file, target_file)
-            # 处理Excel文件
+            # 处理Excel文件（xlsx/xlsm）
             elif file.lower().endswith((".xlsx", ".xlsm")):
                 print(f"处理Excel: {source_file} -> {target_file}")
                 if process_excel_file(source_file, target_file, info):
                     processed_excel += 1
                 else:
                     failed_files += 1
-                    # 处理失败的话复制原文件
+                    print(f"复制原文件: {source_file} -> {target_file}")
+                    shutil.copy2(source_file, target_file)
+            # 处理旧版 Excel 文件（xls）
+            elif file.lower().endswith(".xls"):
+                print(f"处理Excel(xls): {source_file} -> {target_file}")
+                if process_xls_file(source_file, target_file, info):
+                    processed_excel += 1
+                else:
+                    failed_files += 1
                     print(f"复制原文件: {source_file} -> {target_file}")
                     shutil.copy2(source_file, target_file)
             else:
